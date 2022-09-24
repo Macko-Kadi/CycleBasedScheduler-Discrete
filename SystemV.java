@@ -20,14 +20,12 @@ public class SystemV {
 	int bufferSize;
 	int currSlot;
 	int TAcurrSlot;
-	int startSlot=700000; //when start to collect data (it should be steady state) 
-	int endSimSlot=53000000; 
+	int startSlot=300000; //czas rozbiegu
+	int endSimSlot=3000000; //czas konca symulacji
 	int tA;
 	int tV;
 	int cycle;
-	int cycleSlot; 
-	int nrOfPacketsArrived;
-	int nrOfPacketsLost;
+	int cycleSlot; //ktory slot w ramach cyklu
 	Packet packetInService;
 	int[] timesQueDist;
 	int[] timesSysDist;
@@ -36,7 +34,6 @@ public class SystemV {
 	int[][] queuesDistSlot;
 	int[][] systemDistSlot;
 	int[][] systemTimeDistSlot;
-	int[] arrivals;
 	ArrayList<Packet> queueList;
 	
 	//for the case, when TV time is hidden in the first TA slot
@@ -55,18 +52,17 @@ public class SystemV {
 				cycle=tA+tV;
 		queueList = new ArrayList<Packet>();
 		queuesDist= new int[bufferSize+1];
-		systemDist= new int[bufferSize+1];
-		timesQueDist = new int[200];
-		timesSysDist = new int[200];
-		arrivals = new int[200];
+		systemDist= new int[bufferSize+2];
+		timesQueDist = new int[bufferSize+1];
+		timesSysDist = new int[bufferSize+2];
 		queuesDistSlot= new int[cycle][bufferSize+1];
-		systemDistSlot= new int[cycle][bufferSize+1];
-		systemTimeDistSlot= new int[cycle][200];
+		systemDistSlot= new int[cycle][bufferSize+2];
+		systemTimeDistSlot= new int[cycle][bufferSize+2];
 		//for the case, when TV time is hidden in the first TA slot
-		TAsystemTimeDistSlot=new int[tA][200];
-		TAtimesSysDist= new int[200];
-		TAsystemDistSlot= new int[tA][200];
-		TAsystemDist= new int[200];
+		TAsystemTimeDistSlot=new int[tA][bufferSize+2];
+		TAtimesSysDist= new int[bufferSize+2];
+		TAsystemDistSlot= new int[tA][bufferSize+2];
+		TAsystemDist= new int[bufferSize+2];
 	}
 	/*
 	 * returns first packet from queue or null if queue is empty
@@ -82,18 +78,14 @@ public class SystemV {
 	}
 	
 	//SELECT DISTRIBUTION 
-	public void addToQueue(boolean doCollectStats){
-		int nrOfPackets=source.getPoisson();  	//poisson
-	//	int nrOfPackets=source.getTwoPoints(); 	//two points, p(0)=1-lambda, p(1)=lambda
-	//	int nrOfPackets=source.getGeo();  		// geometric (does not depend on lambda! Always mean=0.3)
-    //  int nrOfPackets=source.getNewDistr(); 	// exemplary distribution, mean=lambda
-		arrivals[nrOfPackets]+=1;
-		if(doCollectStats) nrOfPacketsArrived+=nrOfPackets;
-		for (int i=0; i<nrOfPackets;i++) {
-			if(queueList.size()<bufferSize) 
-				queueList.add(new Packet(currSlot, TAcurrSlot));
-			else if(doCollectStats) nrOfPacketsLost+=1;			
-		}
+	public void addToQueue(){
+		int nrOfPackets=source.getPoisson();
+		//exemplary distribution (independent in slots)
+		//int nrOfPackets=source.getNewDistr();
+		//exemplary distribution (with correlation and statistics)
+	//	int nrOfPackets=source.getNewCorrDistr(cycleSlot);
+		for (int i=0; i<nrOfPackets;i++)
+			queueList.add(new Packet(currSlot, TAcurrSlot));
 	}
 	
 	public void updateStats(boolean doCollectStats){
@@ -105,6 +97,7 @@ public class SystemV {
 			queuesDistSlot[cycleSlot][queueSize]++;
 			systemDist[systemSize]++;
 			systemDistSlot[cycleSlot][systemSize]++;
+		//	System.out.println("slot: " + cycleSlot + " queueList.size(): "+queueList.size()+" inService: "+ packetInService + " systemSize: "+systemSize);
 			//for the case, when TV time is hidden in the first TA slot
 			if (cycleSlot<tA){
 				TAsystemDist[systemSize]++;
@@ -124,8 +117,21 @@ public class SystemV {
 				//the distribution is related to the slot that ends (so the previous one)
 				int slotThatEnds=(currSlot-1)%cycle;
 				systemTimeDistSlot[slotThatEnds][timeSpendInSystem]++;		
+				
+				
+							
+				//different scheme of collecting:
+				//1. delays of packet that service finished at the n-th slot)
+				//int TAslotThatEnds=(TAcurrSlot-1)%tA;	
+				//TAsystemTimeDistSlot[TAslotThatEnds][TAtimeSpendInSystem]++;	
+				//2. delays of packet that arrive at the n-th slot)
 				int TAslot=packetInService.TASlotCreation%tA;
-				TAsystemTimeDistSlot[TAslot][TAtimeSpendInSystem]++;					
+				TAsystemTimeDistSlot[TAslot][TAtimeSpendInSystem]++;	
+			//	System.out.println(" currslot: "+currSlot+" Pkt created: " + packetInService.slotCreation+ " (only TA): "+packetInService.TASlotCreation+" out: " +timeSpendInSystem + " (in TA): " +TAtimeSpendInSystem+" TAcurrSlot "+TAcurrSlot);
+			//	System.out.println("Pkt created: " + packetInService.slotCreation%cycle+ " (only TA): "+packetInService.TASlotCreation%tA+" out: " +timeSpendInSystem + " (in TA): " +TAtimeSpendInSystem);
+				
+		//		System.out.println(packetInService.slotCreation%cycle+ "  " +timeSpendInSystem + "  " +TAtimeSpendInSystem);
+				
 			}
 		}
 		packetInService=null;
@@ -157,11 +163,11 @@ public class SystemV {
 					Helper.doCollectStats=true;
 			}
 			endService(doCollectStats);
-			addToQueue(doCollectStats);
-			//at first add to queue, then -> to service
+			addToQueue();
 			if (cycleSlot<tA){
 				startService(doCollectStats);
 			}
+			//System.out.println("cycleSlot: "+cycleSlot +" TASlot: "+TAcurrSlot%tA);
 			updateStats(doCollectStats);		
 		}
 		double [] timeS=Helper.normalizeDistr1D(timesSysDist);
@@ -177,67 +183,59 @@ public class SystemV {
 		double [] TAtimeS=Helper.normalizeDistr1D(TAtimesSysDist);
 		double [][] TAdistSlotS=Helper.normalizeDistr2D(TAsystemDistSlot);
 		double [] TAdistS=Helper.normalizeDistr1D(TAsystemDist);
-		double [] distArrival=Helper.normalizeDistr1D(arrivals);
-		double ploss=(double)nrOfPacketsLost / (double)nrOfPacketsArrived;
-
+		//Helper.printLength(systemTimeDistSlot,15);
+		
 		//arrival probabilities
 		double [][] arrivalDistr=Helper.normalizeDistr2D(source.arrivals);
 		
-		int howManyValues=6;
+		int howManyValues=10;
 		//Excell friendly format
-		System.out.println("----time in system----");
+		/*
+		System.out.println("----time spend in system----");
 		System.out.println(Helper.print1DExcell(timeS, howManyValues));
 		System.out.println("----nr in system----");
 		System.out.println(Helper.print1DExcell(distS, howManyValues));
 		System.out.println("----nr in system (per slot)----");
 		System.out.println(Helper.print2DExcell(distSlotS, howManyValues));
-		System.out.println("----mean nr in system (per slot)----");
-		System.out.println(Helper.print1DExcell(Helper.getMean(distSlotS), 10));
 		System.out.println("----time in queue----");
 		System.out.println(Helper.print1DExcell(timeQ, howManyValues));
 		System.out.println("----nr in queue----");
 		System.out.println(Helper.print1DExcell(distQ, howManyValues));
 		System.out.println("----nr in queue (per slot)----");
 		System.out.println(Helper.print2DExcell(distSlotQ, howManyValues));
-		System.out.println("----mean nr in queue (per slot)----");
-		System.out.println(Helper.print1DExcell(Helper.getMean(distSlotQ), 10));
-		System.out.println("----ploss----");
-		System.out.println(Helper.roundDouble(ploss,4));
-	//	System.out.println("---sojourn time distribution (when service finished in the n-th slot)----");
-	///	System.out.println(Helper.print2DExcell(distTimePerSlot, 5*howManyValues));		
-	//	System.out.println("----nr in system (for the case, when TV time is hidden in the first TA slot)----");
-	//	System.out.println(Helper.print1DExcell(TAdistS, howManyValues));
-	//	System.out.println("----nr in system (for the case, when TV time is hidden in the first TA slot) (per slot)----");
-	//	System.out.println(Helper.print2DExcell(TAdistSlotS, howManyValues));
-	//	System.out.println("----time spend in system (for the case, when TV time is hidden in the first TA slot)----");
-	//	System.out.println(Helper.print1DExcell(TAtimeS, howManyValues));
-	//	System.out.println("----waiting time distribution (of packets that arrive during n-th slot) (for the case, when TV time is hidden in the first TA slot) ----");
-	//	System.out.println(Helper.print2DExcell(TAdistTimePerSlot, 2*howManyValues));	
-	//	System.out.println("-----arrival distribution-----");
-	//	System.out.println(Helper.print1DExcell(distArrival, howManyValues));
-		
+		System.out.println("----waiting time distribution (when service finished in the n-th slot)----");
+		System.out.println(Helper.print2DExcell(distTimePerSlot, howManyValues));		
+		System.out.println("----nr in system (for the case, when TV time is hidden in the first TA slot)----");
+		System.out.println(Helper.print1DExcell(TAdistS, howManyValues));
+		System.out.println("----nr in system (for the case, when TV time is hidden in the first TA slot) (per slot)----");
+		System.out.println(Helper.print2DExcell(TAdistSlotS, howManyValues));
+		System.out.println("----time spend in system (for the case, when TV time is hidden in the first TA slot)----");
+		System.out.println(Helper.print1DExcell(TAtimeS, howManyValues));
+		System.out.println("----waiting time distribution (of packets that arrive during n-th slot) (for the case, when TV time is hidden in the first TA slot) ----");
+		System.out.println(Helper.print2DExcell(TAdistTimePerSlot, howManyValues));	
+		*/
 		
 		//Matlab friendly format
 		System.out.println("----time spend in system----");
-		System.out.println(Helper.print1D(timeS, 20));
-//		System.out.println("----nr in system----");
-//		System.out.println(Helper.print1D(distS, howManyValues));
+		System.out.println(Helper.print1D(timeS, howManyValues));
+		System.out.println("----nr in system----");
+		System.out.println(Helper.print1D(distS, howManyValues));
 		System.out.println("----nr in system (per slot)----");
 		System.out.println(Helper.print2D(distSlotS, howManyValues));
-//		System.out.println("----time in queue----");
-//		System.out.println(Helper.print1D(timeQ, howManyValues));
-//		System.out.println("----nr in queue----");
-//		System.out.println(Helper.print1D(distQ, howManyValues));
+		System.out.println("----time in queue----");
+		System.out.println(Helper.print1D(timeQ, howManyValues));
+		System.out.println("----nr in queue----");
+		System.out.println(Helper.print1D(distQ, howManyValues));
 		System.out.println("----nr in queue (per slot)----");
-		System.out.println(Helper.print2D(distSlotQ, howManyValues-1));
-//		System.out.println("----waiting time distribution (when service finished in the n-th slot)----");
-//		System.out.println(Helper.print2D(distTimePerSlot, howManyValues));
-//		//arrival probabilities
-//		System.out.println("----arrival probabilities----");
-//		System.out.println(Helper.print2D(arrivalDistr, howManyValues));
+		System.out.println(Helper.print2D(distSlotQ, howManyValues));
+		System.out.println("----waiting time distribution (when service finished in the n-th slot)----");
+		System.out.println(Helper.print2D(distTimePerSlot, howManyValues));
+		//arrival probabilities
+		System.out.println("----arrival probabilities----");
+		System.out.println(Helper.print2D(arrivalDistr, howManyValues));
 		}
 	public static void main(String[] args) {
-		SystemV system = new SystemV(5,10,0.4,15);
+		SystemV system = new SystemV(1,0,0.4,350);
 		system.run();
 	
 	}

@@ -19,7 +19,7 @@ public final class Helper {
 	public static boolean DEBUG; 		//I set this value when SystemWithVacations object is created
 	public static boolean DEBUG_QUEUE;	//I set this value when SystemWithVacations object is created
 	public static boolean SLOTED;		//is the system sloted/continous - I set this value when SystemWithVacations object is created
-	public static boolean PRIORITIES;
+//	public static boolean PRIORITIES;
 	public static boolean doCollectStats;
 	public static boolean SAVE_PACKET_TRACE;
 	public static boolean DISPLAY_DETAILS_FOR_EACH_SIM;
@@ -57,21 +57,7 @@ public final class Helper {
 		return new int[a.length][a[0].length];
 	}
 	
-	public static double[] getMean(double[][] a) {
-		double[] table = new double[a.length];
-		for (int i=0; i<a.length; i++){
-			table[i]=roundDouble(getMeanOne(a[i]),4);
-		}
-		return table;
-	}
 	
-	public static double getMeanOne(double[] a) {
-		double sum=0;
-		for (int i=0;i<a.length; i++) {
-			sum=sum+i*a[i];
-		}
-		return sum;
-	}
 	/**
 	 * Normalizes values of amount to probability
 	 * -tab------tabNorm
@@ -148,7 +134,7 @@ public final class Helper {
 			array=trimArray(array, howManyValues);
 		String row="";
 		for (double d : array)
-			row=row+d+ "\t ";
+			row=row+d+ " ";
 		return row;
 	}
 	public static String print2D(int[][] array, int howManyValues){
